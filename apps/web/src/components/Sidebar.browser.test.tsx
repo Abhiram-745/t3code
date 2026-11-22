@@ -203,6 +203,42 @@ function threadShell(projectId: ProjectId, index: number): EnvironmentThreadShel
   });
 }
 
+describe("sidebar thread clicks", () => {
+  // regression: #40715 macOS keeps counting clicks across rows, so a fast second row click arrives with detail 2
+  it("opens a row clicked right after a click on another row", async () => {
+    const web = project("web");
+    const docs = project("docs");
+    vi.mocked(useProjects).mockReturnValue([web, docs]);
+    const first = threadShell(web.id, 0);
+    const second = threadShell(docs.id, 1);
+    vi.mocked(useQuietThreadShells).mockReturnValue([first, second]);
+    vi.mocked(useThreadRouteTarget).mockReturnValue(null);
+    vi.mocked(useHandleNewThread).mockReturnValue({
+      activeDraftThread: null,
+      activeThread: null,
+      defaultProjectRef: null,
+      defaultProjectFallbackReady: true,
+      handleNewThread: vi.fn(),
+      routeDraftId: null,
+      routeThreadRef: null,
+    });
+
+    await using screen = await render(
+      <SidebarProvider>
+        <Sidebar routeReveal={{ observedKey: null, pendingKey: null }} />
+      </SidebarProvider>,
+    );
+    await userEvent.click(screen.getByText("Thread 0").first());
+    await vi.waitFor(() => expect(screen.router!.state.location.pathname).toContain("thread-0"));
+
+    const secondRow = screen.getByText("Thread 1").first().element();
+    secondRow.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, cancelable: true, detail: 2 }),
+    );
+    await vi.waitFor(() => expect(screen.router!.state.location.pathname).toContain("thread-1"));
+  });
+});
+
 describe("sidebar render isolation", () => {
   // regression: #33100 Cmd+J re-rendered every sidebar row, which took hundreds of ms with many threads
   it("does not re-render thread rows when a quick Mod shortcut opens and focuses the terminal", async () => {
